@@ -3,6 +3,6 @@ layout: home
 title: "Home"
 ---
 
-This theme allows an academic person to showcase their research interests, publications, research group, curriculum vitae, any courses that they may be teaching, or anything else they may want to put out into the world.
+My research interests span the field of machine learning. I am particularly interested in reinforcement learning with its extensions to multi-agent and reward-free settings.
 
-Academics can use this home page to describe their research interests, display their latest publications, or provide an introduction to their research group.
+I have recently started to explore the fields of meta-reinforcement learning and curiosity-driven exploration.

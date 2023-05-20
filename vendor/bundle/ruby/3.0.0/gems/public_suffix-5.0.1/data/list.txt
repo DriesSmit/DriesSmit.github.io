@@ -7866,8 +7866,8 @@ coupon
 // coupons : 2015-03-26 Binky Moon, LLC
 coupons
 
-// courses : 2014-12-04 Registry Services, LLC
-courses
+// blogs : 2014-12-04 Registry Services, LLC
+blogs
 
 // cpa : 2019-06-10 American Institute of Certified Public Accountants
 cpa
