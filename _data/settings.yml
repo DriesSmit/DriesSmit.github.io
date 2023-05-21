@@ -6,9 +6,7 @@ menu:
 - {name: 'contact', url: '/contact'}
 
 blogs:
-- {name: 'Vector Calculus', url: 'vector-calculus'}
-- {name: 'Quantum Mechanics', url: 'quantum-mechanics'}
-- {name: 'Stellar Structures', url: 'stellar-structures'}
+- {name: 'Curiosity in Reinforcement Learning', url: 'vector-calculus'}
 
 social:
 - {icon: 'github', link: 'https://github.com/DriesSmit'}
