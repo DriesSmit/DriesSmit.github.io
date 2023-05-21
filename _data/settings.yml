@@ -6,7 +6,7 @@ menu:
 - {name: 'contact', url: '/contact'}
 
 blogs:
-- {name: 'Curiosity in Reinforcement Learning', url: 'vector-calculus'}
+- {name: 'Curiosity in Reinforcement Learning', url: 'curiosity-in-rl'}
 
 social:
 - {icon: 'github', link: 'https://github.com/DriesSmit'}

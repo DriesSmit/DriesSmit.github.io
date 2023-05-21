@@ -2,32 +2,11 @@
 layout: default
 ---
 
-{{ content }}
-
-<div class="row g-5 mb-5">
-  <div>
-    <h3 class="fw-bold border-bottom pb-3 mb-5">CV</h3>
-    <div class="row g-5 mb-5">
-      <div class="col-md-2">
-        <h4>Education</h4>
+<div class="container-fluid">
+  <div class="row">
+      <div class="col-12">
+          <iframe src="https://docs.google.com/document/d/e/2PACX-1vQYzDtjxM9VpO043HL4XNQ3YTWOB5zZYQz2jEzJ86ugZZQ4tXgUaaIOKEccieQOXaxsv8Ss4HziJfe7/pub?embedded=true" style="width:110vw; height:1300px;"></iframe>
       </div>
-      <div class="col-md-10">
-        {% for section in site.data.cv.education %}
-          <p class="fw-bold">{{ section.title }}</p>
-          <p>{{ section.description }}</p>
-        {% endfor %}
-      </div>
-    </div>
-    <div class="row g-5 mb-5">
-      <div class="col-md-2">
-        <h4>Academic Experience</h4>
-      </div>
-      <div class="col-md-10">
-        {% for section in site.data.cv.academic-experience %}
-          <p class="fw-bold">{{ section.title }}</p>
-          <p>{{ section.description }}</p>
-        {% endfor %}
-      </div>
-    </div>
   </div>
 </div>
+
