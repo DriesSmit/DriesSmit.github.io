@@ -3,6 +3,6 @@ layout: home
 title: "Home"
 ---
 
-My research interests span the field of machine learning. I am particularly interested in reinforcement learning with its extensions to multi-agent and reward-free settings.
+My research interests encompass a broad range of topics within machine learning. My previous work has been focused on reinforcement learning, delving into its applications in multi-agent systems, meta-learning, and the exploration of reward-free, curiosity-driven frameworks. 
 
-I have recently started to explore the fields of meta-reinforcement learning and curiosity-driven exploration.
+Recently, my attention has shifted towards the field of conversational large language models (LLMs), particularly within the medical domain.
