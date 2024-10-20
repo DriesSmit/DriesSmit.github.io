@@ -1,8 +1,3 @@
-run:
-	bundle exec jekyll serve
+all:
+	python3 -m http.server
 
-break_lock:
-	bundle config set --local path 'vendor/bundle'	
-
-build:
-	bundle install
