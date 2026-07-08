@@ -1,0 +1,166 @@
+/*
+ * Modern refinements layered on top of the Start Bootstrap "Resume" theme.
+ * Keeps the single-scroll layout and the green (#0c5421) accent that matches
+ * the profile photo — just adds contemporary polish (spacing, motion, contrast).
+ * Loaded after resume.min.css so these rules win without touching the theme.
+ */
+
+:root {
+  --accent: #0c5421;        /* profile-matching green */
+  --accent-light: #12752e;  /* lighter green for hovers/gradients */
+  --accent-dark: #093f19;
+  --accent-soft: rgba(12, 84, 33, 0.08);
+  --ink: #4b5158;           /* darker, more readable body text */
+}
+
+/* ---- Typography & reading comfort ------------------------------------ */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+p {
+  line-height: 1.75;
+}
+
+/* Cap very long lines so the intro stays comfortable to read on wide screens */
+#about p {
+  max-width: 62rem;
+}
+
+/* Responsive hero heading so it never overflows on small screens */
+h1 {
+  font-size: clamp(3.5rem, 11vw, 6rem);
+  line-height: 1.04;
+}
+
+/* Section titles get a small green accent bar underneath */
+section.resume-section > .my-auto > h2 {
+  position: relative;
+  padding-bottom: 0.85rem;
+  margin-bottom: 2.75rem !important;
+}
+section.resume-section > .my-auto > h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 3rem;
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--accent);
+}
+
+/* Smooth anchor landing so sections aren't hidden under the top nav on mobile */
+section.resume-section {
+  scroll-margin-top: 70px;
+}
+
+/* ---- Sidebar navigation ---------------------------------------------- */
+/* Subtle vertical gradient instead of a flat green block */
+.bg-primary {
+  background: linear-gradient(180deg, var(--accent-light) 0%, var(--accent) 55%, var(--accent-dark) 100%) !important;
+}
+
+#sideNav .navbar-nav .nav-item .nav-link {
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0.1rem 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+#sideNav .navbar-nav .nav-item .nav-link:hover,
+#sideNav .navbar-nav .nav-item .nav-link:focus {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Profile photo: softer border, depth, and a gentle hover lift */
+#sideNav .navbar-brand .img-profile {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  transition: transform 0.3s ease;
+}
+#sideNav .navbar-brand:hover .img-profile {
+  transform: scale(1.04);
+}
+
+/* ---- Links ----------------------------------------------------------- */
+a {
+  color: var(--accent);
+  transition: color 0.2s ease;
+}
+a:hover,
+a:focus,
+a:active {
+  color: var(--accent-light);
+}
+
+/* Animated underline for in-content links (skips icons & publication titles) */
+.resume-section p a,
+.resume-section li a:not(.text-primary) {
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent-light), var(--accent-light));
+  background-size: 0% 2px;
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  transition: background-size 0.25s ease, color 0.2s ease;
+  padding-bottom: 1px;
+}
+.resume-section p a:hover,
+.resume-section li a:not(.text-primary):hover {
+  background-size: 100% 2px;
+}
+
+/* Social icons keep their circular style — no underline, green on hover */
+.list-social-icons a {
+  background-image: none !important;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.list-social-icons a:hover {
+  color: var(--accent-light);
+  transform: translateY(-2px);
+}
+
+/* ---- Experience / education items ------------------------------------ */
+/* A green accent bar slides in on hover for a subtle sense of interactivity */
+.resume-item .resume-content {
+  border-left: 3px solid transparent;
+  padding-left: 0;
+  transition: border-color 0.25s ease, padding-left 0.25s ease;
+}
+.resume-item:hover .resume-content {
+  border-left-color: var(--accent);
+  padding-left: 0.9rem;
+}
+
+/* ---- Lists ----------------------------------------------------------- */
+.resume-section ul:not(.list-inline):not(.list-unstyled):not(.navbar-nav) li {
+  margin-bottom: 0.4rem;
+}
+.resume-section ul:not(.list-inline):not(.list-unstyled):not(.navbar-nav) li::marker {
+  color: var(--accent);
+}
+
+/* ---- Images ---------------------------------------------------------- */
+.resume-section img:not(.img-profile) {
+  border-radius: 12px;
+}
+/* Rounded, shadowed thumbnails in the Updates timeline */
+#updates div[style*="aspect-ratio"] {
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Small niceties -------------------------------------------------- */
+::selection {
+  background: rgba(12, 84, 33, 0.16);
+}
+
+a:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
