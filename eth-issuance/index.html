@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to fix Ethereum’s issuance race to zero</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%232a78d6' d='M12 1 5.2 12.4 12 16.6 18.8 12.4Z'/%3E%3Cpath fill='%2386b6ef' d='M12 18.2 5.2 14 12 23 18.8 14Z'/%3E%3C/svg%3E">
+<style>
+  .viz-root {
+    color-scheme: light;
+    /* surfaces & chrome */
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --good-text:      #006300;
+    /* categorical slots (fixed order) */
+    --series-1: #898781;   /* current protocol (baseline gray) */
+    --series-2: #eb6834;   /* nominal APR        */
+    --series-3: #1baf7a;   /* net inflation      */
+    --series-4: #eda100;   /* unstaked holder    */
+    --series-5: #2a78d6;   /* EIP-8363 proposal (accent blue)  */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --good-text:      #0ca30c;
+      --series-1: #898781;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --good-text:      #0ca30c;
+    --series-1: #898781;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh; padding: 28px clamp(16px, 4vw, 48px) 56px; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+  h1 { font-size: 21px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .logo { flex: none; }
+  .sub { color: var(--text-secondary); max-width: 68ch; margin: 0 0 12px; }
+  .quote { margin: 10px 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid var(--series-5);
+           color: var(--text-secondary); font-size: 15px; font-style: italic; max-width: 62ch; }
+  .quote cite { display: block; font-style: normal; font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+  .quote a { color: inherit; }
+  .theme-btn {
+    flex: none; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; width: 34px; height: 34px; padding: 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .theme-btn:hover { color: var(--text-primary); }
+  .theme-btn svg[hidden] { display: none; }
+
+  /* ---- controls: one row above everything they scope ---- */
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .ctl.primary { margin-bottom: 14px; }
+  .ctl.primary > label { font-size: 14px; align-items: center; }
+  .ctl.primary > label output { font-size: 21px; }
+  .ctl.primary > input[type="range"] { height: 24px; }
+  .assump { margin-top: 10px; border-top: 1px solid var(--grid); padding-top: 8px; }
+  .assump summary { color: var(--text-muted); font-size: 12.5px; cursor: pointer; user-select: none; }
+  .assump summary:hover { color: var(--text-secondary); }
+  .assump .controls { margin-top: 10px; }
+  .assump .ctl { border: none; padding: 0; background: none; }
+  .legend .li-toggle { cursor: pointer; user-select: none; }
+  .legend .li-toggle:hover { color: var(--text-primary); }
+  .legend .li-toggle input { margin: 0; width: 14px; height: 14px; accent-color: var(--series-5); }
+  .ctl {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px 12px;
+  }
+  .ctl label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--text-secondary); font-size: 12.5px; margin-bottom: 6px; }
+  .ctl label output { color: var(--text-primary); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+  .ctl input[type="range"] { width: 100%; accent-color: var(--series-5); margin: 0; display: block; }
+  .ctl .hint { color: var(--text-muted); font-size: 11.5px; margin-top: 5px; }
+
+  /* ---- chart card ---- */
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px 10px; position: relative;
+  }
+  .card h2 { font-size: 14.5px; font-weight: 600; margin: 0; }
+  .card .card-sub { color: var(--text-muted); font-size: 12.5px; margin: 2px 0 4px; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 2px; }
+  .legend .li { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; }
+  .legend .lk { width: 16px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+  .legend .lk-svg { flex: none; display: block; }
+
+  #chart { display: block; width: 100%; cursor: crosshair; }
+  #chart text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #chart .tick-t { fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  #chart .gridline { stroke: var(--grid); stroke-width: 1; }
+  #chart .refline { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 4; stroke-linecap: round; }
+  #chart .ref-t { fill: var(--text-secondary); font-size: 11.5px; }
+  #chart .ref-link { cursor: pointer; }
+  #chart .ref-link text { text-decoration: underline dotted; }
+  #chart .ref-link:hover text { fill: var(--text-primary); }
+  #chart .series { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #chart .mdot { stroke: var(--surface-1); stroke-width: 2; }
+  #chart .xhair { stroke: var(--text-muted); stroke-width: 1; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.12); padding: 6px 9px;
+  }
+  .tooltip .tt-head { font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
+  .tooltip .tt-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 11px; }
+  .tooltip .tt-key { width: 10px; height: 0; border-top: 2.5px solid; border-radius: 2px; flex: none; }
+  .tooltip .tt-val { font-weight: 650; font-variant-numeric: tabular-nums; min-width: 42px; }
+  .tooltip .tt-name { color: var(--text-secondary); }
+
+  .foot { color: var(--text-muted); font-size: 12.5px; max-width: 86ch; margin-top: 14px;
+          border-top: 1px solid var(--grid); padding-top: 8px; }
+  .foot code { font-size: 11.5px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+  .foot p { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <div class="title-row">
+          <svg class="logo" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+            <path d="M12 1 L12 16.6 L5.2 12.4 Z"   fill="#2a78d6"/>
+            <path d="M12 1 L18.8 12.4 L12 16.6 Z"  fill="#86b6ef"/>
+            <path d="M12 23 L5.2 13.9 L12 18.3 Z"  fill="#1c5cab"/>
+            <path d="M12 23 L12 18.3 L18.8 13.9 Z" fill="#5598e7"/>
+          </svg>
+          <h1>How to fix Ethereum’s issuance race to zero</h1>
+        </div>
+        <blockquote class="quote">
+          “Full censorship will be extremely difficult because solo stakers exist on Ethereum.”
+          <cite><a href="https://coinedition.com/vitalik-buterin-champions-solo-stakers-at-home-staking-summit/">Vitalik Buterin, Home Staking Summit</a></cite>
+        </blockquote>
+        <p class="sub">
+          Solo stakers are the heart of Ethereum: thousands of independent validators, aligned with
+          no company or jurisdiction, are the network’s first and last line of defense for neutrality
+          and censorship resistance. Solo stakers need real income to sustain their operations.
+        </p>
+        <p class="sub">
+          The goal is simple: <strong>preserve real yield for Ethereum participants, and with it,
+          solo staking</strong>. The gray line is real yield under the current issuance curve; the
+          blue line is the proposed change (EIP-8363). Today staking always beats holding ETH, so
+          ever more ETH gets staked even as returns collapse; past the ~64% mark nobody earns a
+          real profit. EIP-8363 settles staking before the 50% mark, so stakers keep earning real
+          yield while, as a side effect, native ETH is also diluted far less. It need not be the
+          final EIP on this matter; it is one promising approach, but an idea like this probably
+          has to be implemented in the near future to protect the security of Ethereum itself.
+        </p>
+      </div>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle light/dark theme">
+        <svg id="iconMoon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="iconSun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </header>
+
+    <div class="ctl primary" role="group" aria-label="EIP-8363 transition">
+      <label for="trans">EIP-8363 transition <output id="transOut"></output></label>
+      <input type="range" id="trans" min="0" max="18" step="1" value="0">
+      <div class="hint">months passed since activation · reward factor 128 → 64 · blue line only</div>
+      <details class="assump">
+        <summary>Assumptions: supply, tips/MEV, burn, tax</summary>
+        <div class="controls" role="group" aria-label="Model assumptions">
+          <div class="ctl">
+            <label for="supply">Total ETH supply <output id="supplyOut"></output></label>
+            <input type="range" id="supply" min="100" max="140" step="0.1" value="120.6">
+            <div class="hint">million ETH · ≈120.6M today</div>
+          </div>
+          <div class="ctl">
+            <label for="tips">Tips + MEV to proposers <output id="tipsOut"></output></label>
+            <input type="range" id="tips" min="0" max="400" step="1" value="78">
+            <div class="hint">thousand ETH / yr · existing ETH, not issuance</div>
+          </div>
+          <div class="ctl">
+            <label for="burn">Base-fee burn <output id="burnOut"></output></label>
+            <input type="range" id="burn" min="0" max="800" step="1" value="12">
+            <div class="hint">thousand ETH / yr · EIP-1559, offsets issuance</div>
+          </div>
+          <div class="ctl">
+            <label for="tax">Income tax on rewards <output id="taxOut"></output></label>
+            <input type="range" id="tax" min="0" max="60" step="1" value="40">
+            <div class="hint">on nominal rewards at receipt · 0% = tax-exempt · varies by jurisdiction</div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Annual rates across staking participation</h2>
+          <div class="card-sub">Gray: what you keep under today’s rules. Blue: under the proposed EIP-8363 setup. Hover over the chart to read values at any staking rate.</div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <svg id="chart" role="img" aria-label="Line chart of real solo-staker yield versus the share of ETH supply staked, under the current protocol and the proposed EIP-8363. The same values appear in the breakdown under Assumptions."></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+
+
+
+
+    <div class="foot">
+      <p><strong>Go deeper.</strong> This page is only an attempt to communicate the amazing work done by brilliant
+      minds on this matter. Start with <a href="https://issuance.wtf/" style="color:inherit">issuance.wtf</a>, the
+      curated hub of the issuance debate, then the expert writeups themselves:
+      <a href="https://notes.ethereum.org/@anderselowsson/MinimumViableIssuance" style="color:inherit">Elowsson’s
+      Minimum Viable Issuance</a>,
+      <a href="https://eips.ethereum.org/EIPS/eip-8363" style="color:inherit">the EIP-8363 specification</a>,
+      <a href="https://pintail.xyz/posts/2026/staking-ratio/" style="color:inherit">pintail’s staking-ratio
+      analysis</a>, and
+      <a href="https://realbigsean.com/ethereum-issuance" style="color:inherit">realbigsean’s issuance explorer</a>.
+      I highly encourage you to dig through the research yourself, or use AI tools to help unpack the high-level
+      concepts.</p>
+      <p><strong>Model.</strong> Current consensus spec: annual protocol issuance
+      <code>I = 166.32 · √S</code> ETH (S = ETH staked), from <code>BASE_REWARD_FACTOR = 64</code>
+      and 82,181 epochs/yr, so consensus APR = <code>166.32 / √S</code>. A solo staker keeps 100% of
+      consensus rewards plus a pro-rata share of execution-layer tips + MEV (a transfer of existing ETH).
+      Net supply growth <code>π = (I − burn) / supply</code>. Real yields:
+      staker <code>(1 + APR) / (1 + π) − 1</code>; unstaked holder <code>1/(1+π) − 1</code>.</p>
+      <p><strong>EIP-8363 overlay (proposed).</strong> A fraction <code>b = (S / 60.25M)^1.5</code> (capped at 1) of each
+      validator’s consensus rewards is deducted and burned, so net consensus issuance is <code>I·(1−b)</code>, so staking
+      yield from issuance tapers to zero at 50% of supply staked (60.25M ETH). Tips/MEV are unaffected, and the reduced
+      net issuance also lowers supply growth. The transition lever models the spec’s ~18-month phase-in: the effective
+      base reward factor starts doubled (128) at activation and decays linearly to 64, scaling rewards and the burn’s
+      reference uniformly (the spec’s 65-step staircase is approximated continuously). The default shows day one of
+      the transition; drag the months lever to 18 for the permanent regime.</p>
+      <p id="eq-note"><strong>Where does staking settle under each setup?</strong> The shaded zones on the chart are
+      estimates, not protocol constants. A staking market settles where net yield falls to the risk premium stakers
+      demand, called the <em>reservation yield</em> in
+      <a href="https://notes.ethereum.org/@anderselowsson/MinimumViableIssuance" style="color:inherit">Elowsson’s
+      minimum-viable-issuance framework</a>, with the equilibrium yield ultimately set by the lowest-cost staker type
+      (liquid-staking tokens, not solo stakers). <em>Current curve:</em> there is no healthy resting point:
+      <a href="https://pintail.xyz/posts/2026/staking-ratio/" style="color:inherit">Hasu &amp; Konstantopoulos
+      projected 80–100% staked</a> once liquid staking removes the frictions, and past ~64% (the gray zone) after-tax
+      real yield turns negative for every staker, yet holding unstaked stays worse still, so the race continues.
+      <em>EIP-8363:</em> <a href="https://eips.ethereum.org/EIPS/eip-8363" style="color:inherit">its rationale</a>
+      leaves the landing spot to the market but guarantees it sits below 50%, where the taper zeroes issuance yield.
+      Two calibrations of a standard supply curve (yield-elasticity 2) pin it down: anchored at Elowsson’s
+      illustrative point (2% yield at 25M ETH staked) it intersects the permanent curve near <em>25% of supply</em>;
+      anchored at today’s revealed behavior (~40M ETH at ≈2.8% nominal), near <em>24%</em>. Sticky existing stake and
+      risk premiums that fall as staking matures argue for headroom above those points, hence the blue zone at
+      roughly 25–35%. Update these ranges as better estimates emerge.</p>
+      <p><strong>Taxes.</strong> A rough estimate only: the tax rate applies to the full <em>nominal</em> reward at receipt
+      (the common treatment for staking income); the dilution loss is not deductible, which is why tax bites harder than
+      it looks and real yield can go negative at high staking rates. The unstaked holder’s dilution is unrealized, hence
+      untaxed here. Capital gains on later sale, deductions, and wealth taxes are ignored; set the slider to 0% for the
+      protocol-only view.</p>
+      <p><strong>Why isn’t real yield zero at 100% staked?</strong> Issuance alone would give exactly zero: everyone
+      dilutes everyone equally. What remains comes from fee transfers paid by transaction senders: tips/MEV go to
+      stakers, and the burn keeps supply growth below gross issuance. Set tips/MEV and burn to 0 (and tax to 0%) and
+      the line lands at 0.00%.</p>
+      <p><strong>Assumptions.</strong> Perfect uptime, no slashing, average proposer luck; yields are protocol-denominated
+      (share of total ETH supply), independent of ETH’s fiat price. Axis starts at 5% staked; below that,
+      per-validator yields grow without bound. Defaults ≈ mid-Aug 2026: ~40M ETH staked (33.2%) of ~120.6M supply,
+      tips + MEV ≈ 78k ETH/yr, base-fee burn ≈ 12k ETH/yr (30-day annualized). At 0% tax, current-protocol numbers
+      cross-check with
+      <a href="https://realbigsean.com/ethereum-issuance" style="color:inherit">realbigsean.com/ethereum-issuance</a>.
+      Background on the issuance-policy debate (proposed curve reductions, EIP-8363):
+      <a href="https://issuance.wtf/" style="color:inherit">issuance.wtf</a>. The break-even analysis mirrors
+      <a href="https://pintail.xyz/posts/2026/staking-ratio/" style="color:inherit">pintail’s staking-ratio post</a>;
+      its ~64% figure matches this page’s default 40% tax rate.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- model ----------
+  var ISSUANCE_C = 166.3235;      // ETH/yr = C * sqrt(S), S in ETH
+  var SATURATION_8363 = 60.25e6;  // EIP-8363 SATURATION_BALANCE, ETH (spec constant)
+  var TODAY_STAKED_M = 40.0;      // ETH staked today, millions (mid-Aug 2026)
+
+  // returns all rates as fractions (0.028 = 2.8%)
+  function model(ratePct, supplyM, tipsK, burnK, taxPct, transMonths) {
+    var supply = supplyM * 1e6;
+    var S = supply * ratePct / 100;
+    var issuance = ISSUANCE_C * Math.sqrt(S);          // ETH/yr
+    var consAPR = issuance / S;
+    var elAPR = (tipsK * 1e3) / S;
+    var nominal = consAPR + elAPR;
+    // tax hits the full nominal reward at receipt; dilution is not deductible
+    var t = (taxPct || 0) / 100;
+    var nominalAT = nominal * (1 - t);
+    var pi = (issuance - burnK * 1e3) / supply;        // net supply growth
+    var real = (1 + nominalAT) / (1 + pi) - 1;
+    var holder = 1 / (1 + pi) - 1;                     // dilution is unrealized → untaxed
+    // EIP-8363 (proposed): fraction b of consensus rewards deducted & burned; tips/MEV untouched.
+    // Transition: effective base reward factor decays linearly 128 -> 64 over 18 months,
+    // scaling the whole schedule (rewards and burn reference) uniformly.
+    var mo = transMonths === undefined ? 18 : transMonths;
+    var phi = 2 - Math.min(18, Math.max(0, mo)) / 18;  // factor / 64: 2 at day one, 1 when permanent
+    var b8363 = Math.min(1, Math.pow(S / SATURATION_8363, 1.5));
+    var kept = issuance * phi * (1 - b8363);           // consensus rewards actually received = net minted
+    var nominal8363 = kept / S + elAPR;
+    var pi8363 = (kept - burnK * 1e3) / supply;
+    var real8363 = (1 + nominal8363 * (1 - t)) / (1 + pi8363) - 1;
+    var holder8363 = 1 / (1 + pi8363) - 1;
+    return { S: S, issuance: issuance, consAPR: consAPR, elAPR: elAPR,
+             nominal: nominal, nominalAT: nominalAT, pi: pi, real: real, holder: holder,
+             real8363: real8363, nominal8363: nominal8363, pi8363: pi8363, holder8363: holder8363 };
+  }
+
+  var SERIES = [
+    { id: "real",       name: "Real yield: current protocol",    short: "Current protocol",    css: "--series-1", on: true },
+    { id: "real8363",   name: "Real yield: EIP-8363 (proposed)", short: "EIP-8363 (proposed)", css: "--series-5", on: true },
+    { id: "holder",     name: "Unstaked ETH: current",           short: "Unstaked, current",   css: "--series-1", on: true, dash: true },
+    { id: "holder8363", name: "Unstaked ETH: EIP-8363",          short: "Unstaked, EIP-8363",  css: "--series-5", on: true, dash: true }
+  ];
+  function visible() { return SERIES.filter(function (s) { return s.on; }); }
+
+  // ---------- state ----------
+  var state = { rate: 33.2, supply: 120.6, tips: 78, burn: 12, tax: 40, trans: 0 };
+  var X_MIN = 5, X_MAX = 100, X_STEP = 0.25;
+
+  // ---------- helpers ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    var n = document.createElementNS(NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function pct(v, dp) { return (v * 100).toFixed(dp === undefined ? 2 : dp) + "%"; }
+  function signedPct(v, dp) { return (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(dp === undefined ? 2 : dp) + "%"; }
+  function millions(v) { return (v / 1e6).toFixed(1) + "M"; }
+  function thousands(v) { return Math.round(v / 1e3).toLocaleString("en-US") + "k"; }
+
+  function grid() {
+    var pts = [];
+    for (var r = X_MIN; r <= X_MAX + 1e-9; r += X_STEP) pts.push(+r.toFixed(2));
+    return pts;
+  }
+  var XS = grid();
+
+  function computeCurves() {
+    return XS.map(function (r) { return model(r, state.supply, state.tips, state.burn, state.tax, state.trans); });
+  }
+
+  // ---------- legend: static keys for the main lines + a clickable unstaked toggle ----------
+  function buildLegend() {
+    var lg = $("legend");
+    while (lg.firstChild) lg.removeChild(lg.firstChild);
+    SERIES.forEach(function (s) {
+      if (!s.on || s.dash) return;   // the dashed pair is represented by the toggle below
+      var li = document.createElement("span");
+      li.className = "li";
+      var lk = document.createElement("span");
+      lk.className = "lk"; lk.style.borderTopColor = "var(" + s.css + ")";
+      li.appendChild(lk);
+      li.appendChild(document.createTextNode(s.name));
+      lg.appendChild(li);
+    });
+    var li = document.createElement("label");
+    li.className = "li li-toggle";
+    li.title = "Dashed lines: pure dilution, 1/(1+π) − 1, under each regime; no staking, no tax.";
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = SERIES.some(function (s) { return s.dash && s.on; });
+    cb.addEventListener("change", function () {
+      SERIES.forEach(function (s) { if (s.dash) s.on = cb.checked; });
+      render();
+    });
+    var lk = el("svg", { width: 16, height: 5, viewBox: "0 0 16 5", "class": "lk-svg", "aria-hidden": "true" });
+    el("line", { x1: 1, y1: 2.5, x2: 15, y2: 2.5, stroke: "var(--text-muted)",
+                 "stroke-width": 2.5, "stroke-dasharray": "4 3.5", "stroke-linecap": "round" }, lk);
+    li.appendChild(cb); li.appendChild(lk);
+    li.appendChild(document.createTextNode("Unstaked raw ETH"));
+    lg.appendChild(li);
+  }
+  buildLegend();
+
+  // ---------- chart ----------
+  var svg = $("chart"), tooltip = $("tooltip");
+  var M = { top: 30, right: 30, bottom: 50, left: 52 };
+  var geom = null;      // { w, h, x(), y() }
+  var curves = null;    // model() per XS point
+
+  function niceStep(range) {
+    var raw = range / 7, steps = [0.25, 0.5, 1, 2, 2.5, 5, 10], i;
+    for (i = 0; i < steps.length; i++) if (steps[i] >= raw) return steps[i];
+    return steps[steps.length - 1];
+  }
+
+  function seriesVal(m, id) {
+    return id === "real" ? m.real : id === "real8363" ? m.real8363
+         : id === "holder" ? m.holder : m.holder8363;
+  }
+
+  function render() {
+    curves = computeCurves();
+    var w = svg.clientWidth || 900, h = 430;
+    var compact = w < 700;                 // small screens: sparser x ticks
+    var MR = M.right;
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("height", h);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // y domain across visible series (in %), padded to nice steps
+    var VIS = visible();
+    var lo = 0, hi = 0;
+    curves.forEach(function (m) {
+      VIS.forEach(function (s) {
+        var v = seriesVal(m, s.id) * 100;
+        if (v < lo) lo = v; if (v > hi) hi = v;
+      });
+    });
+    var step = niceStep(hi - lo);
+    var yMin = Math.floor(lo / step) * step, yMax = Math.ceil(hi / step) * step;
+    if (yMax === hi) yMax += step;
+
+    var pw = w - M.left - MR, ph = h - M.top - M.bottom;
+    var x = function (r) { return M.left + (r - X_MIN) / (X_MAX - X_MIN) * pw; };
+    var y = function (v) { return M.top + (yMax - v) / (yMax - yMin) * ph; };
+    geom = { w: w, h: h, x: x, y: y, pw: pw, ph: ph };
+
+    // gridlines + y ticks
+    for (var v = yMin; v <= yMax + 1e-9; v += step) {
+      var yy = y(v);
+      el("line", { x1: M.left, x2: M.left + pw, y1: yy, y2: yy, "class": "gridline" }, svg);
+      var t = el("text", { x: M.left - 8, y: yy + 4, "text-anchor": "end", "class": "tick-t" }, svg);
+      t.textContent = (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + "%";
+    }
+    // x ticks
+    for (var r = compact ? 20 : 10; r <= 100; r += compact ? 20 : 10) {
+      var xx = x(r);
+      var tx = el("text", { x: xx, y: M.top + ph + 20, "text-anchor": "middle", "class": "tick-t" }, svg);
+      tx.textContent = r + "%";
+    }
+    var xlab = el("text", { x: M.left + pw / 2, y: M.top + ph + 42, "text-anchor": "middle", "class": "tick-t" }, svg);
+    xlab.textContent = "share of ETH supply staked";
+
+    // dotted reference lines + light equilibrium washes
+    function zeroCross(key) {   // first staking rate where the series drops to/below zero
+      for (var i = 1; i < curves.length; i++) {
+        var a = seriesVal(curves[i - 1], key), b = seriesVal(curves[i], key);
+        if (a > 0 && b <= 0) return XS[i - 1] + (XS[i] - XS[i - 1]) * (a / (a - b));
+      }
+      return null;
+    }
+    function wash(fromRate, css, opacity) {
+      el("rect", { x: x(fromRate), y: M.top, width: M.left + pw - x(fromRate), height: ph,
+                   fill: "var(" + css + ")", "fill-opacity": opacity }, svg);
+    }
+    var refs = [];
+    var todayRate = 100 * TODAY_STAKED_M / state.supply;
+    if (todayRate >= X_MIN && todayRate <= X_MAX)
+      refs.push({ r: todayRate, label: "today ≈" + Math.round(todayRate) + "%" });
+    if (SERIES[1].on) {          // EIP-8363: soft band where staking would plausibly settle
+      var z0 = 25, z1 = 35;
+      el("rect", { x: x(z0), y: M.top, width: x(z1) - x(z0), height: ph,
+                   fill: "var(--series-5)", "fill-opacity": 0.11 }, svg);
+      var za = el("a", { href: "#eq-note", "class": "ref-link" }, svg);
+      var zt = el("text", { x: (x(z0) + x(z1)) / 2, y: M.top + ph - 10,
+                            "text-anchor": "middle", "class": "ref-t" }, za);
+      zt.textContent = "EIP-8363 equilibrium: everyone earns real yield";
+      var ztt = el("title", {}, za);
+      ztt.textContent = "Where staking would settle under EIP-8363; click for the reasoning.";
+    }
+    if (SERIES[0].on) {          // current protocol: real yield turns negative
+      var be = zeroCross("real");
+      if (be !== null && be >= X_MIN && be <= X_MAX) {
+        wash(be, "--series-1", 0.09);
+        var ga = el("a", { href: "#eq-note", "class": "ref-link" }, svg);
+        var gt = el("text", { x: (x(be) + M.left + pw) / 2, y: M.top + ph - 10,
+                              "text-anchor": "middle", "class": "ref-t" }, ga);
+        gt.textContent = "current issuance: nobody earns real yield";
+        var gtt = el("title", {}, ga);
+        gtt.textContent = "Past break-even, staking loses purchasing power under today’s rules; click for the notes.";
+        refs.push({ r: be, label: "break-even " + be.toFixed(0) + "%", css: "--series-1" });
+      }
+    }
+    refs.sort(function (a, b) { return a.r - b.r; });
+    var lastRefX = -1e9;
+    refs.forEach(function (ref) {
+      var xx = x(ref.r);
+      var attrs = { x1: xx, x2: xx, y1: M.top, y2: M.top + ph, "class": "refline" };
+      if (ref.css) attrs.style = "stroke: var(" + ref.css + ")";
+      el("line", attrs, svg);
+      var anchorEnd = xx > M.left + pw * 0.82;
+      var ty = M.top + 14;
+      if (Math.abs(xx - lastRefX) < 130) ty += 15;   // stagger when labels get close
+      var t = el("text", { x: xx + (anchorEnd ? -6 : 6), y: ty,
+                           "text-anchor": anchorEnd ? "end" : "start", "class": "ref-t" }, svg);
+      t.textContent = ref.label;
+      lastRefX = xx;
+    });
+
+    // series paths (dashed context lines first, solid mains on top)
+    VIS.slice().sort(function (a, b) { return (a.dash ? 0 : 1) - (b.dash ? 0 : 1); }).forEach(function (s) {
+      var d = "";
+      XS.forEach(function (r, i) {
+        var v = seriesVal(curves[i], s.id) * 100;
+        d += (i === 0 ? "M" : "L") + x(r).toFixed(1) + " " + y(v).toFixed(1);
+      });
+      var attrs = { d: d, "class": "series", stroke: "var(" + s.css + ")" };
+      if (s.dash) attrs["stroke-dasharray"] = "6 5";
+      el("path", attrs, svg);
+    });
+
+    finishRender();
+
+    function finishRender() {
+      // crosshair (hidden until hover)
+      el("line", { id: "xhair", "class": "xhair", x1: 0, x2: 0, y1: M.top, y2: M.top + ph, visibility: "hidden" }, svg);
+
+      // today marker: dots on each series (the dotted refs carry the vertical lines)
+      var g = el("g", { id: "marker" }, svg);
+      VIS.forEach(function (s) {
+        el("circle", { "class": "mdot", r: 4.5, fill: "var(" + s.css + ")", "data-sid": s.id }, g);
+      });
+      positionMarker();
+    }
+  }
+
+  function positionMarker() {
+    if (!geom) return;
+    var m = model(state.rate, state.supply, state.tips, state.burn, state.tax, state.trans);
+    var xx = geom.x(state.rate);
+    svg.querySelectorAll(".mdot").forEach(function (c) {
+      var v = seriesVal(m, c.getAttribute("data-sid")) * 100;
+      c.setAttribute("cx", xx); c.setAttribute("cy", geom.y(v));
+    });
+  }
+
+  // ---------- tooltip ----------
+  function showTooltip(idx, clientX, clientY) {
+    var r = XS[idx], m = curves[idx];
+    var xh = $("xhair"), xx = geom.x(r);
+    xh.setAttribute("x1", xx); xh.setAttribute("x2", xx);
+    xh.setAttribute("visibility", "visible");
+
+    while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
+    var head = document.createElement("div");
+    head.className = "tt-head";
+    head.textContent = r.toFixed(2).replace(/\.?0+$/, "") + "% · " + millions(m.S) + " ETH staked";
+    tooltip.appendChild(head);
+    visible().forEach(function (s) {
+      var row = document.createElement("div"); row.className = "tt-row";
+      var key = document.createElement("span"); key.className = "tt-key";
+      key.style.borderTopColor = "var(" + s.css + ")";
+      var val = document.createElement("span"); val.className = "tt-val";
+      var v = seriesVal(m, s.id);
+      val.textContent = (v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(2) + "%";
+      var name = document.createElement("span"); name.className = "tt-name"; name.textContent = s.short;
+      row.appendChild(key); row.appendChild(val); row.appendChild(name);
+      tooltip.appendChild(row);
+    });
+
+    // pinned to the chart's top-right corner (always clear of the declining curves)
+    var cardRect = svg.parentElement.getBoundingClientRect();
+    var svgRect = svg.getBoundingClientRect();
+    tooltip.style.display = "block";
+    tooltip.style.left = "auto";
+    tooltip.style.right = "28px";
+    tooltip.style.top = (svgRect.top - cardRect.top + M.top + 8) + "px";
+  }
+  function hideTooltip() {
+    tooltip.style.display = "none";
+    var xh = $("xhair"); if (xh) xh.setAttribute("visibility", "hidden");
+  }
+
+  function eventRate(ev) {
+    var rect = svg.getBoundingClientRect();
+    var px = ev.clientX - rect.left;
+    var r = X_MIN + (px - M.left) / geom.pw * (X_MAX - X_MIN);
+    return Math.max(X_MIN, Math.min(X_MAX, r));
+  }
+
+  svg.addEventListener("pointermove", function (ev) {
+    if (!geom) return;
+    var r = eventRate(ev);
+    var idx = Math.round((r - X_MIN) / X_STEP);
+    idx = Math.max(0, Math.min(XS.length - 1, idx));
+    showTooltip(idx, ev.clientX, ev.clientY);
+  });
+  svg.addEventListener("pointerleave", hideTooltip);
+
+  // ---------- controls ----------
+  function syncOutputs() {
+    $("supplyOut").textContent = state.supply.toFixed(1) + "M ETH";
+    $("tipsOut").textContent = state.tips.toLocaleString("en-US") + "k ETH/yr";
+    $("burnOut").textContent = state.burn.toLocaleString("en-US") + "k ETH/yr";
+    $("taxOut").textContent = state.tax + "%";
+    $("transOut").textContent = state.trans >= 18 ? "complete"
+      : state.trans <= 0 ? "day one" : "month " + state.trans + " / 18";
+  }
+  function refreshAll() {
+    syncOutputs(); render();
+  }
+
+  ["supply", "tips", "burn", "tax", "trans"].forEach(function (id) {
+    $(id).addEventListener("input", function () {
+      state[id] = parseFloat(this.value);
+      refreshAll();
+    });
+  });
+
+  // ---------- theme toggle: sun/moon, seeded from the browser preference ----------
+  function effectiveTheme() {
+    var stamped = document.documentElement.getAttribute("data-theme");
+    if (stamped) return stamped;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function updateThemeIcon() {
+    var dark = effectiveTheme() === "dark";
+    $("iconSun").hidden = !dark;    // in dark mode, offer the sun
+    $("iconMoon").hidden = dark;    // in light mode, offer the moon
+    $("themeBtn").setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  }
+  $("themeBtn").addEventListener("click", function () {
+    document.documentElement.setAttribute("data-theme", effectiveTheme() === "dark" ? "light" : "dark");
+    updateThemeIcon();
+  });
+  if (window.matchMedia)
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateThemeIcon);
+
+  // ---------- boot & resize ----------
+  var qs = new URLSearchParams(location.search);
+  if (qs.has("assumptions")) document.querySelector(".assump").open = true;
+  ["rate", "supply", "tips", "burn", "tax", "trans"].forEach(function (id) {
+    var v = parseFloat(qs.get(id));
+    if (!isNaN(v)) { state[id] = v; var input = $(id); if (input) input.value = v; }
+  });
+  if (qs.has("unstaked")) {
+    SERIES.forEach(function (s) { if (s.dash) s.on = true; });
+    buildLegend();
+  }
+  var qTheme = qs.get("theme");
+  if (qTheme === "light" || qTheme === "dark")
+    document.documentElement.setAttribute("data-theme", qTheme);
+  updateThemeIcon();
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { render(); }, 120);
+  });
+  refreshAll();
+})();
+</script>
+</body>
+</html>
